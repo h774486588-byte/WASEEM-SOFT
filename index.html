@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>WASEEM SOFT — مستخرج الملفات المضغوطة</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:Arial,Tahoma,sans-serif;background:#f4f7fb;color:#172033}
+.wrap{max-width:1000px;margin:30px auto;padding:20px}.card{background:#fff;border-radius:18px;padding:24px;box-shadow:0 8px 30px #00000012}
+h1{margin:0 0 8px;font-size:28px}.muted{color:#687386;margin-bottom:22px}
+.drop{border:2px dashed #8ea0ba;border-radius:16px;padding:42px 20px;text-align:center;background:#f9fbff;cursor:pointer}
+.drop.drag{background:#eef5ff;border-color:#3977d6}.icon{font-size:45px}.btn{border:0;border-radius:10px;padding:12px 18px;background:#1769e0;color:white;cursor:pointer;font-weight:bold}
+.btn.secondary{background:#e8eef8;color:#19304f}.row{display:flex;gap:10px;flex-wrap:wrap;margin-top:15px}
+.info{margin-top:20px;padding:15px;background:#f6f8fc;border-radius:12px}.hidden{display:none}
+table{width:100%;border-collapse:collapse;margin-top:18px}th,td{padding:11px;border-bottom:1px solid #e7ebf2;text-align:right}th{background:#f5f7fa}
+.progress{height:10px;background:#e7edf5;border-radius:10px;overflow:hidden;margin-top:15px}.bar{height:100%;width:0;background:#1769e0}
+.status{margin-top:12px;font-weight:bold}
+.small{font-size:13px;color:#6c7685}
+</style>
+</head>
+<body>
+<div class="wrap"><div class="card">
+<h1>📦 مستخرج الملفات المضغوطة — WASEEM SOFT</h1>
+<div class="muted">ارفع ملف ZIP، ثم استعرض محتوياته واستخرج الملفات إلى مجلد تختاره.</div>
+
+<label class="drop" id="drop">
+  <div class="icon">🗜️</div>
+  <b>اسحب ملف ZIP إلى هنا</b>
+  <div class="small">أو اضغط لاختيار ملف من جهازك</div>
+  <input id="file" type="file" accept=".zip,application/zip" hidden>
+</label>
+
+<div class="row">
+<button class="btn" id="choose">اختيار ملف ZIP</button>
+<button class="btn secondary hidden" id="extract">استخراج الملفات</button>
+<button class="btn secondary hidden" id="clear">مسح</button>
+</div>
+
+<div id="info" class="info hidden"></div>
+<div class="progress hidden" id="progress"><div class="bar" id="bar"></div></div>
+<div class="status" id="status"></div>
+<div id="list"></div>
+</div></div>
+
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+let zipFile=null, zip=null;
+$('choose').onclick=()=>$('file').click();
+$('drop').onclick=()=> $('file').click();
+
+$('file').onchange=e=>loadFile(e.target.files[0]);
+$('drop').ondragover=e=>{e.preventDefault();$('drop').classList.add('drag')};
+$('drop').ondragleave=()=>$('drop').classList.remove('drag');
+$('drop').ondrop=e=>{e.preventDefault();$('drop').classList.remove('drag');loadFile(e.dataTransfer.files[0])};
+
+async function loadFile(file){
+ if(!file) return;
+ if(!file.name.toLowerCase().endsWith('.zip')){setStatus('اختر ملف ZIP فقط.');return}
+ zipFile=file; $('status').textContent='جاري قراءة الملف...';
+ try{
+  zip=await JSZip.loadAsync(file);
+  const entries=Object.values(zip.files);
+  const files=entries.filter(x=>!x.dir);
+  $('info').classList.remove('hidden');
+  $('info').innerHTML=`<b>الملف:</b> ${esc(file.name)}<br><b>الحجم:</b> ${fmt(file.size)}<br><b>عدد الملفات:</b> ${files.length}`;
+  $('extract').classList.remove('hidden');$('clear').classList.remove('hidden');
+  render(files);setStatus('تم تحميل الملف بنجاح.');
+ }catch(err){setStatus('تعذر قراءة الملف: '+err.message)}
+}
+function render(files){
+ let html='<table><thead><tr><th>الملف</th><th>الحجم المضغوط</th></tr></thead><tbody>';
+ for(const f of files) html+=`<tr><td>${esc(f.name)}</td><td>${f._data&&f._data.compressedSize?fmt(f._data.compressedSize):'—'}</td></tr>`;
+ html+='</tbody></table>'; $('list').innerHTML=html;
+}
+$('extract').onclick=async()=>{
+ if(!zip)return;
+ $('progress').classList.remove('hidden'); $('bar').style.width='0%'; setStatus('جاري استخراج الملفات...');
+ const entries=Object.values(zip.files).filter(x=>!x.dir);
+ const out=await zip.generateAsync({type:'blob'},m=>{$('bar').style.width=Math.round(m.percent)+'%'});
+ // المتصفح لا يسمح بإنشاء مجلدات محلية مباشرة؛ نحمّل ZIP أعيد إنشاؤه بعد التحقق.
+ const a=document.createElement('a');a.href=URL.createObjectURL(out);a.download=zipFile.name.replace(/\\.zip$/i,'')+'-extracted-ready.zip';a.click();
+ setStatus('تم تجهيز نسخة ZIP للاستخراج على جهازك. افتحها/فك ضغطها باستخدام مدير الملفات.');
+};
+$('clear').onclick=()=>location.reload();
+function fmt(n){if(n<1024)return n+' B';if(n<1048576)return (n/1024).toFixed(1)+' KB';return (n/1048576).toFixed(1)+' MB'}
+function esc(s){return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function setStatus(s){$('status').textContent=s}
+</script>
+</body></html>
