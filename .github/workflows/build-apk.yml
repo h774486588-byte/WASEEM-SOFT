@@ -1,207 +1,363 @@
-name: Build Android APK from ZIP
+name: بناء تطبيق WASEEM MEDICAL PRO APK
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
 
 jobs:
   build-apk:
     runs-on: ubuntu-latest
 
     steps:
-      # 1 — تحميل المستودع
-      - name: Checkout repository
+
+      # ==========================================
+      # 1. تحميل المشروع
+      # ==========================================
+      - name: تحميل المستودع
         uses: actions/checkout@v4
 
-      # 2 — إعداد Java
-      - name: Setup Java
+
+      # ==========================================
+      # 2. إعداد Java
+      # ==========================================
+      - name: إعداد Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      # 3 — إعداد Android SDK
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
 
-      # 4 — تثبيت Android SDK
-      - name: Install Android SDK
+      # ==========================================
+      # 3. استخدام Android SDK الموجود مسبقاً
+      # ==========================================
+      - name: إعداد Android SDK
+        shell: bash
         run: |
-          yes | sdkmanager --licenses || true
-          sdkmanager \
+
+          echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
+
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+
+          echo "ANDROID_HOME=$ANDROID_SDK_ROOT"
+
+          ls -la "$ANDROID_SDK_ROOT"
+
+
+      # ==========================================
+      # 4. تثبيت Android SDK المطلوب
+      # ==========================================
+      - name: تثبيت أدوات Android
+        shell: bash
+        run: |
+
+          yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses || true
+
+          "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" \
             "platform-tools" \
             "platforms;android-35" \
             "build-tools;35.0.0"
 
-      # 5 — البحث عن الملف المضغوط
-      - name: Find ZIP application
+
+      # ==========================================
+      # 5. العثور على ملف ZIP
+      # ==========================================
+      - name: البحث عن ملف ZIP
+        shell: bash
         run: |
-          ZIP_FILE=$(find . -maxdepth 2 -type f \
+
+          echo "الملفات المضغوطة الموجودة:"
+
+          find . \
+            -type f \
+            -iname "*.zip" \
+            ! -path "./.git/*"
+
+          ZIP_FILE=$(find . \
+            -type f \
             -iname "*.zip" \
             ! -path "./.git/*" \
             | head -n 1)
 
           if [ -z "$ZIP_FILE" ]; then
-            echo "لم يتم العثور على ملف ZIP"
+
+            echo "❌ لم يتم العثور على ملف ZIP"
+
             exit 1
+
           fi
 
           echo "ZIP_FILE=$ZIP_FILE" >> "$GITHUB_ENV"
-          echo "تم العثور على: $ZIP_FILE"
 
-      # 6 — فك ضغط المشروع
-      - name: Extract ZIP
+          echo "✅ تم العثور على:"
+          echo "$ZIP_FILE"
+
+
+      # ==========================================
+      # 6. فك ضغط ZIP
+      # ==========================================
+      - name: استخراج المشروع
+        shell: bash
         run: |
+
           rm -rf extracted
+
           mkdir -p extracted
 
           unzip -o "$ZIP_FILE" -d extracted
 
-          echo "محتويات المشروع:"
-          find extracted -maxdepth 3 -type f | head -100
+          echo "================================"
+          echo "محتويات المشروع"
+          echo "================================"
 
-      # 7 — البحث عن index.html
-      - name: Find Web Application
+          find extracted -maxdepth 4 -type f | head -200
+
+
+      # ==========================================
+      # 7. البحث عن index.html
+      # ==========================================
+      - name: البحث عن تطبيق الويب
+        shell: bash
         run: |
+
           INDEX_FILE=$(find extracted \
             -type f \
             -iname "index.html" \
             | head -n 1)
 
           if [ -z "$INDEX_FILE" ]; then
-            echo "لم يتم العثور على index.html داخل ZIP"
+
+            echo "❌ لم يتم العثور على index.html"
+
+            echo "الملفات الموجودة:"
+
+            find extracted -type f
+
             exit 1
+
           fi
 
           WEB_DIR=$(dirname "$INDEX_FILE")
 
           echo "INDEX_FILE=$INDEX_FILE" >> "$GITHUB_ENV"
+
           echo "WEB_DIR=$WEB_DIR" >> "$GITHUB_ENV"
 
-          echo "ملف التطبيق:"
+          echo "✅ تم العثور على التطبيق:"
+
           echo "$INDEX_FILE"
 
-      # 8 — إنشاء مشروع Android
-      - name: Create Android Project
+
+      # ==========================================
+      # 8. إنشاء مشروع Android
+      # ==========================================
+      - name: إنشاء مشروع Android
+        shell: bash
         run: |
+
           rm -rf android-app
 
+          mkdir -p android-app
+
           mkdir -p android-app/app/src/main/java/com/waseem/medical
+
+          mkdir -p android-app/app/src/main/res/values
+
           mkdir -p android-app/app/src/main/assets
-          mkdir -p android-app/app/src/main/res/mipmap-hdpi
-          mkdir -p android-app/app/src/main/res/mipmap-mdpi
-          mkdir -p android-app/app/src/main/res/mipmap-xhdpi
-          mkdir -p android-app/app/src/main/res/mipmap-xxhdpi
-          mkdir -p android-app/app/src/main/res/mipmap-xxxhdpi
 
-      # 9 — نسخ تطبيق الويب إلى Android
-      - name: Copy Web Application
+
+      # ==========================================
+      # 9. نسخ تطبيق الويب
+      # ==========================================
+      - name: نسخ تطبيق الويب
+        shell: bash
         run: |
-          cp -R "$WEB_DIR"/. android-app/app/src/main/assets/
 
-          echo "تم نسخ تطبيق الويب إلى Android Assets"
+          cp -R "$WEB_DIR"/. \
+            android-app/app/src/main/assets/
 
-      # 10 — settings.gradle
-      - name: Create settings.gradle
+          echo "✅ تم نسخ ملفات التطبيق"
+
+
+      # ==========================================
+      # 10. settings.gradle
+      # ==========================================
+      - name: إنشاء settings.gradle
+        shell: bash
         run: |
+
           cat > android-app/settings.gradle <<'EOF'
+
           pluginManagement {
+
               repositories {
+
                   google()
+
                   mavenCentral()
+
                   gradlePluginPortal()
+
               }
+
           }
 
           dependencyResolutionManagement {
-              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+
+              repositoriesMode.set(
+                  RepositoriesMode.FAIL_ON_PROJECT_REPOS
+              )
 
               repositories {
+
                   google()
+
                   mavenCentral()
+
               }
+
           }
 
           rootProject.name = "WASEEM-MEDICAL-PRO"
+
           include(":app")
+
           EOF
 
-      # 11 — build.gradle الرئيسي
-      - name: Create root build.gradle
+
+      # ==========================================
+      # 11. build.gradle
+      # ==========================================
+      - name: إنشاء build.gradle
+        shell: bash
         run: |
+
           cat > android-app/build.gradle <<'EOF'
-          plugins {
-              id 'com.android.application' version '8.7.3' apply false
-          }
-          EOF
 
-      # 12 — gradle.properties
-      - name: Create gradle.properties
-        run: |
-          cat > android-app/gradle.properties <<'EOF'
-          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
-          android.useAndroidX=true
-          android.nonTransitiveRClass=true
-          EOF
-
-      # 13 — Android build.gradle
-      - name: Create app build.gradle
-        run: |
-          cat > android-app/app/build.gradle <<'EOF'
           plugins {
+
               id 'com.android.application'
+                  version '8.7.3'
+                  apply false
+
+          }
+
+          EOF
+
+
+      # ==========================================
+      # 12. gradle.properties
+      # ==========================================
+      - name: إنشاء gradle.properties
+        shell: bash
+        run: |
+
+          cat > android-app/gradle.properties <<'EOF'
+
+          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+
+          android.useAndroidX=true
+
+          android.nonTransitiveRClass=true
+
+          EOF
+
+
+      # ==========================================
+      # 13. app/build.gradle
+      # ==========================================
+      - name: إنشاء إعداد التطبيق
+        shell: bash
+        run: |
+
+          cat > android-app/app/build.gradle <<'EOF'
+
+          plugins {
+
+              id 'com.android.application'
+
           }
 
           android {
+
               namespace 'com.waseem.medical'
+
               compileSdk 35
 
               defaultConfig {
-                  applicationId 'com.waseem.medical'
+
+                  applicationId "com.waseem.medical"
+
                   minSdk 23
+
                   targetSdk 35
+
                   versionCode 1
-                  versionName '1.0'
+
+                  versionName "1.0"
+
               }
 
               buildTypes {
-                  release {
+
+                  debug {
+
                       minifyEnabled false
-                      proguardFiles getDefaultProguardFile(
-                          'proguard-android-optimize.txt'
-                      ), 'proguard-rules.pro'
+
                   }
+
+                  release {
+
+                      minifyEnabled false
+
+                  }
+
               }
+
           }
+
           EOF
 
-      # 14 — AndroidManifest
-      - name: Create Android Manifest
+
+      # ==========================================
+      # 14. AndroidManifest
+      # ==========================================
+      - name: إنشاء AndroidManifest
+        shell: bash
         run: |
-          mkdir -p android-app/app/src/main
 
           cat > android-app/app/src/main/AndroidManifest.xml <<'EOF'
+
           <?xml version="1.0" encoding="utf-8"?>
 
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+          <manifest
+              xmlns:android="http://schemas.android.com/apk/res/android">
 
-              <uses-permission android:name="android.permission.INTERNET" />
+              <uses-permission
+                  android:name="android.permission.INTERNET" />
 
               <application
+
                   android:allowBackup="true"
+
                   android:usesCleartextTraffic="true"
-                  android:theme="@style/AppTheme"
-                  android:label="نظام وسيم الطبي PRO">
+
+                  android:label="نظام وسيم الطبي PRO"
+
+                  android:theme="@style/AppTheme">
 
                   <activity
+
                       android:name=".MainActivity"
+
                       android:exported="true">
 
                       <intent-filter>
-                          <action android:name="android.intent.action.MAIN" />
-                          <category android:name="android.intent.category.LAUNCHER" />
+
+                          <action
+                              android:name="android.intent.action.MAIN" />
+
+                          <category
+                              android:name="android.intent.category.LAUNCHER" />
+
                       </intent-filter>
 
                   </activity>
@@ -209,14 +365,19 @@ jobs:
               </application>
 
           </manifest>
+
           EOF
 
-      # 15 — إنشاء Style
-      - name: Create Android Theme
+
+      # ==========================================
+      # 15. تصميم Android
+      # ==========================================
+      - name: إنشاء Theme
+        shell: bash
         run: |
-          mkdir -p android-app/app/src/main/res/values
 
           cat > android-app/app/src/main/res/values/styles.xml <<'EOF'
+
           <?xml version="1.0" encoding="utf-8"?>
 
           <resources>
@@ -226,19 +387,35 @@ jobs:
                   parent="android:style/Theme.Material.Light.NoActionBar">
 
                   <item name="android:fontFamily">sans</item>
-                  <item name="android:windowLightStatusBar">false</item>
-                  <item name="android:statusBarColor">#0D4778</item>
-                  <item name="android:navigationBarColor">#0D4778</item>
+
+                  <item name="android:statusBarColor">
+                      #0D4778
+                  </item>
+
+                  <item name="android:navigationBarColor">
+                      #0D4778
+                  </item>
+
+                  <item name="android:windowLightStatusBar">
+                      false
+                  </item>
 
               </style>
 
           </resources>
+
           EOF
 
-      # 16 — إنشاء MainActivity
-      - name: Create MainActivity
+
+      # ==========================================
+      # 16. MainActivity
+      # ==========================================
+      - name: إنشاء MainActivity
+        shell: bash
         run: |
+
           cat > android-app/app/src/main/java/com/waseem/medical/MainActivity.java <<'EOF'
+
           package com.waseem.medical;
 
           import android.app.Activity;
@@ -253,23 +430,35 @@ jobs:
 
               @Override
               protected void onCreate(Bundle savedInstanceState) {
+
                   super.onCreate(savedInstanceState);
 
                   webView = new WebView(this);
 
-                  WebSettings settings = webView.getSettings();
+                  WebSettings settings =
+                      webView.getSettings();
 
                   settings.setJavaScriptEnabled(true);
+
                   settings.setDomStorageEnabled(true);
+
                   settings.setDatabaseEnabled(true);
+
                   settings.setAllowFileAccess(true);
+
                   settings.setAllowContentAccess(true);
+
                   settings.setBuiltInZoomControls(false);
+
                   settings.setDisplayZoomControls(false);
 
-                  webView.setWebViewClient(new WebViewClient());
+                  webView.setWebViewClient(
+                      new WebViewClient()
+                  );
 
-                  webView.loadUrl("file:///android_asset/index.html");
+                  webView.loadUrl(
+                      "file:///android_asset/index.html"
+                  );
 
                   setContentView(webView);
               }
@@ -278,45 +467,79 @@ jobs:
               public void onBackPressed() {
 
                   if (webView.canGoBack()) {
+
                       webView.goBack();
+
                   } else {
+
                       super.onBackPressed();
+
                   }
+
               }
+
           }
+
           EOF
 
-      # 17 — ProGuard
-      - name: Create ProGuard file
+
+      # ==========================================
+      # 17. ProGuard
+      # ==========================================
+      - name: إنشاء ProGuard
+        shell: bash
         run: |
-          cat > android-app/app/proguard-rules.pro <<'EOF'
-          # WASEEM MEDICAL PRO
-          EOF
 
-      # 18 — إنشاء Gradle Wrapper
-      - name: Setup Gradle
+          echo "# WASEEM MEDICAL PRO" \
+            > android-app/app/proguard-rules.pro
+
+
+      # ==========================================
+      # 18. إعداد Gradle
+      # ==========================================
+      - name: إعداد Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
-      # 19 — بناء APK
-      - name: Build Debug APK
+
+      # ==========================================
+      # 19. بناء APK
+      # ==========================================
+      - name: بناء APK
         working-directory: android-app
+        shell: bash
         run: |
+
           gradle assembleDebug --no-daemon
 
-      # 20 — إعادة تسمية APK
-      - name: Rename APK
+
+      # ==========================================
+      # 20. تجهيز APK
+      # ==========================================
+      - name: تجهيز ملف APK
+        shell: bash
         run: |
+
           mkdir -p output
 
-          cp android-app/app/build/outputs/apk/debug/app-debug.apk \
-             output/WASEEM-MEDICAL-PRO.apk
+          cp \
+            android-app/app/build/outputs/apk/debug/app-debug.apk \
+            output/WASEEM-MEDICAL-PRO.apk
 
-      # 21 — رفع APK كملف قابل للتحميل
-      - name: Upload APK
+          ls -lh output/
+
+
+      # ==========================================
+      # 21. رفع APK
+      # ==========================================
+      - name: رفع APK
         uses: actions/upload-artifact@v4
+
         with:
+
           name: WASEEM-MEDICAL-PRO-APK
+
           path: output/WASEEM-MEDICAL-PRO.apk
+
           retention-days: 30
